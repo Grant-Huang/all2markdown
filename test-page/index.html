@@ -136,7 +136,6 @@
 
             const formData = new FormData();
             formData.append('file', selectedFile);
-            formData.append('format', format);
 
             loading.style.display = 'block';
             error.textContent = '';
@@ -145,16 +144,17 @@
             convertTextBtn.disabled = true;
 
             try {
-                const response = await fetch('/upload', {
+                // 上传文件
+                const uploadResponse = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
 
-                if (!response.ok) {
+                if (!uploadResponse.ok) {
                     throw new Error('文件上传失败');
                 }
 
-                const uploadData = await response.json();
+                const uploadData = await uploadResponse.json();
                 console.log('Upload response:', uploadData);
 
                 if (!uploadData.filepath) {
@@ -172,12 +172,14 @@
                         format: format
                     })
                 });
-                const data = await convertResponse.json();
-                console.log('Convert response:', data);
 
                 if (!convertResponse.ok) {
-                    throw new Error(data.error || '转换失败');
+                    const errorData = await convertResponse.json();
+                    throw new Error(errorData.error || '转换失败');
                 }
+
+                const data = await convertResponse.json();
+                console.log('Convert response:', data);
 
                 if (!data.text) {
                     throw new Error('转换结果为空');

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 转 Markdown</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #fileInput {
+            display: none;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .btn-group {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            display: none;
+            font-family: monospace;
+            background-color: #f8f8f8;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+        .file-info {
+            margin: 10px 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF 转 Markdown</h1>
+        <div class="upload-section">
+            <input type="file" id="fileInput" accept=".pdf">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">选择 PDF 文件</button>
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+        <div class="btn-group">
+            <button class="btn" id="convertText" onclick="convertFile('text')" disabled>转换为纯文本</button>
+            <button class="btn" id="convertMarkdown" onclick="convertFile('markdown')" disabled>转换为 Markdown</button>
+        </div>
+        <div class="loading" id="loading">正在转换中...</div>
+        <div class="error" id="error"></div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const error = document.getElementById('error');
+        const fileInfo = document.getElementById('fileInfo');
+        const convertTextBtn = document.getElementById('convertText');
+        const convertMarkdownBtn = document.getElementById('convertMarkdown');
+        let currentFile = null;
+
+        // 处理文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                if (file.type.includes('pdf')) {
+                    currentFile = file;
+                    fileInfo.textContent = `已选择文件: ${file.name}`;
+                    convertTextBtn.disabled = false;
+                    convertMarkdownBtn.disabled = false;
+                    result.style.display = 'none';
+                    error.style.display = 'none';
+                } else {
+                    showError('请选择 PDF 文件');
+                    currentFile = null;
+                    fileInfo.textContent = '';
+                    convertTextBtn.disabled = true;
+                    convertMarkdownBtn.disabled = true;
+                }
+            }
+        });
+
+        function convertFile(format) {
+            if (!currentFile) {
+                showError('请先选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            formData.append('format', format);
+
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            error.style.display = 'none';
+
+            fetch('/convert', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showError(data.error);
+                } else {
+                    showResult(data.text);
+                }
+            })
+            .catch(err => {
+                showError('转换过程中发生错误');
+                console.error('Error:', err);
+            })
+            .finally(() => {
+                loading.style.display = 'none';
+            });
+        }
+
+        function showResult(text) {
+            result.textContent = text;
+            result.style.display = 'block';
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

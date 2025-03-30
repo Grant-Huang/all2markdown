@@ -10,13 +10,11 @@ import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import multer from "multer";
 import path from "path";
-import { fileURLToPath } from "url";
 import { dirname } from "path";
 import http from "http";
 import fs from "fs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = dirname(new URL(import.meta.url).pathname);
 
 const RequestPayloadSchema = z.object({
   filepath: z.string().optional(),

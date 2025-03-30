@@ -1,137 +1,73 @@
 import sys
 import os
-import warnings
-import fitz  # PyMuPDF
-import re
+import pdfplumber
+import io
 
-def convert_pdf_to_text(pdf_path, output_format='markdown'):
+# 中文处理方式说明：
+# 1. 设置标准输出和标准错误的编码为utf-8，解决控制台输出中文乱码问题
+# 2. 使用 pdfplumber 的 extract_text() 方法提取文本，该方法会自动处理中文编码
+# 3. 确保输出文本为 utf-8 编码，避免编码转换问题
+# 4. 使用 errors='ignore' 参数处理无法解码的字符，确保程序不会崩溃
+# 5. 最终输出时使用 encode('utf-8').decode('utf-8') 确保文本格式正确
+
+# 设置标准输出和标准错误的编码为utf-8
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+def convert_pdf_to_text(pdf_path, output_format='text'):
     try:
-        # 忽略警告
-        warnings.filterwarnings('ignore')
-        
         # 检查文件是否存在
         if not os.path.exists(pdf_path):
-            print(f"Error: File not found: {pdf_path}", file=sys.stderr)
-            sys.exit(1)
+            print(f"错误：文件 {pdf_path} 不存在", file=sys.stderr)
+            return None
 
         # 检查文件大小
-        file_size = os.path.getsize(pdf_path)
-        if file_size == 0:
-            print(f"Error: File is empty: {pdf_path}", file=sys.stderr)
-            sys.exit(1)
+        if os.path.getsize(pdf_path) == 0:
+            print(f"错误：文件 {pdf_path} 为空", file=sys.stderr)
+            return None
 
-        print(f"Processing PDF file: {pdf_path}", file=sys.stderr)
-        print(f"File size: {file_size} bytes", file=sys.stderr)
-
+        print("\n=== 使用pdfplumber提取文本 ===", file=sys.stderr)
+        
         # 打开PDF文件
-        doc = fitz.open(pdf_path)
-        num_pages = len(doc)
-        print(f"Number of pages: {num_pages}", file=sys.stderr)
-        
-        # 存储所有页面的文本块
-        all_blocks = []
-        
-        # 遍历每一页并提取文本
-        for page_num in range(num_pages):
-            try:
-                # 获取当前页面
-                page = doc[page_num]
-                
-                # 提取文本块，包含位置信息
-                blocks = page.get_text("dict")["blocks"]
-                
-                for block in blocks:
-                    if "lines" in block:
-                        # 获取块的位置信息
-                        bbox = block.get("bbox", [0, 0, 0, 0])
-                        # 计算块的垂直位置（用于排序）
-                        y_pos = (bbox[1] + bbox[3]) / 2
-                        
-                        block_text = []
-                        for line in block["lines"]:
-                            line_text = []
-                            for span in line["spans"]:
-                                text = span["text"]
-                                # 处理字体大小和样式
-                                font_size = span["size"]
-                                font_name = span["font"].lower()
-                                
-                                # 根据字体大小判断标题级别
-                                if font_size >= 16:
-                                    text = f"# {text}"
-                                elif font_size >= 14:
-                                    text = f"## {text}"
-                                elif font_size >= 12:
-                                    text = f"### {text}"
-                                
-                                # 处理字体样式
-                                if "bold" in font_name:
-                                    text = f"**{text}**"
-                                if "italic" in font_name:
-                                    text = f"*{text}*"
-                                
-                                line_text.append(text)
-                            
-                            if line_text:
-                                block_text.append(" ".join(line_text))
-                        
-                        if block_text:
-                            # 将块添加到列表中，包含位置信息
-                            all_blocks.append({
-                                'text': "\n".join(block_text),
-                                'y_pos': y_pos,
-                                'page': page_num
-                            })
-                
-                print(f"Successfully processed page {page_num + 1}", file=sys.stderr)
-                    
-            except Exception as page_error:
-                print(f"Error processing page {page_num + 1}: {str(page_error)}", file=sys.stderr)
-                continue
-        
-        # 关闭PDF文件
-        doc.close()
-        
-        if not all_blocks:
-            print("Error: No text content was extracted from the PDF", file=sys.stderr)
-            sys.exit(1)
-        
-        # 按页面和垂直位置排序文本块
-        all_blocks.sort(key=lambda x: (x['page'], x['y_pos']))
-        
-        # 合并所有文本块
-        text_content = []
-        current_page = -1
-        
-        for block in all_blocks:
-            # 如果页面改变，添加分页符
-            if block['page'] != current_page:
-                if current_page != -1:
-                    text_content.append("\n---\n")  # 添加分页符
-                current_page = block['page']
+        with pdfplumber.open(pdf_path) as pdf:
+            # 存储所有页面的文本
+            all_text = []
             
-            text_content.append(block['text'])
-        
-        # 将所有文本合并
-        final_content = '\n\n'.join(text_content)
-        
-        # 如果是纯文本格式，移除所有Markdown标记
-        if output_format == 'text':
-            final_content = re.sub(r'[#*`]', '', final_content)
-        
-        # 设置标准输出的编码为UTF-8
-        if sys.stdout.encoding != 'utf-8':
-            sys.stdout.reconfigure(encoding='utf-8')
-        
-        # 打印结果到标准输出
-        print(final_content, file=sys.stdout)
-        
+            # 遍历所有页面
+            for page_num, page in enumerate(pdf.pages, 1):
+                print(f"\n正在处理第 {page_num} 页...", file=sys.stderr)
+                
+                # 提取文本
+                text = page.extract_text()
+                
+                if text:
+                    # 确保文本是utf-8编码
+                    if not isinstance(text, str):
+                        text = text.decode('utf-8', errors='ignore')
+                    
+                    # 打印调试信息
+                    print(f"第 {page_num} 页提取的文本:", file=sys.stderr)
+                    print(text[:200], file=sys.stderr)
+                    
+                    # 添加页码信息
+                    if output_format == 'markdown':
+                        page_content = f"\n## 第 {page_num} 页\n\n{text}"
+                    else:
+                        page_content = f"\n--- 第 {page_num} 页 ---\n{text}"
+                    
+                    all_text.append(page_content)
+            
+            # 合并所有页面的文本
+            if all_text:
+                final_text = "\n\n".join(all_text)
+                return final_text.strip()
+            return None
+
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
-        print(f"Error type: {type(e).__name__}", file=sys.stderr)
+        print(f"转换过程中出错: {str(e)}", file=sys.stderr)
         import traceback
-        print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
-        sys.exit(1)
+        print(f"错误详情: {traceback.format_exc()}", file=sys.stderr)
+        return None
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -140,10 +76,18 @@ if __name__ == "__main__":
         sys.exit(1)
     
     pdf_path = sys.argv[1]
-    output_format = sys.argv[2] if len(sys.argv) > 2 else 'markdown'
+    output_format = sys.argv[2] if len(sys.argv) > 2 else 'text'
     
     if output_format not in ['markdown', 'text']:
         print("Error: format must be either 'markdown' or 'text'", file=sys.stderr)
         sys.exit(1)
     
-    convert_pdf_to_text(pdf_path, output_format) 
+    result = convert_pdf_to_text(pdf_path, output_format)
+    if result:
+        # 使用utf-8编码输出结果，确保中文正确显示
+        if isinstance(result, str):
+            print(result.encode('utf-8').decode('utf-8'))
+        else:
+            print(result.decode('utf-8'))
+    else:
+        sys.exit(1) 
