@@ -30,7 +30,7 @@ app.use('/uploads', express.static('uploads'));
         console.log(`创建目录: ${dir}`);
         fs.mkdirSync(dir);
     } else {
-        console.log(`目录已存在: ${dir}`);
+        //console.log(`目录已存在: ${dir}`);
     }
 });
 
@@ -105,9 +105,6 @@ app.post('/convert', upload.single('file'), (req, res) => {
         fs.unlinkSync(filePath);
         return res.status(400).json({ error: '文件为空' });
     }
-
-    console.log('开始处理文件:', filePath);
-    console.log('输出格式:', format);
 
     // 调用Python脚本进行转换
     const pythonProcess = spawn('python', ['converters/pdf_converter.py', filePath, format]);
