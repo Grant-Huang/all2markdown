@@ -9,7 +9,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -26,6 +25,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
 # IDE
 .idea/
 .vscode/
@@ -35,3 +41,12 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project specific
+test-page/
+uploads/
+*.pdf
+*.md
+!README.md
+*.txt
+!requirements.txt
