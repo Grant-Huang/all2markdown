@@ -5,8 +5,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 async function main() {
   const transport = new StdioServerTransport();
-  const server = createServer();
-  await server.connect(transport);
+  const { mcpServer } = createServer();
+  
+  // 启动MCP服务器
+  await mcpServer.connect(transport);
 }
 
 main().catch((error) => {

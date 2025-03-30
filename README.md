@@ -1,87 +1,39 @@
-# Markdownify MCP Server
+# PDF to Markdown Converter
 
-Markdownify is a Model Context Protocol (MCP) server that converts various file types and web content to Markdown format. It provides a set of tools to transform PDFs, images, audio files, web pages, and more into easily readable and shareable Markdown text.
+这是一个基于 [markdownify-mcp](http://github.com/zcaceres/markdownify-mcp) 项目的PDF转Markdown工具。
 
-<a href="https://glama.ai/mcp/servers/bn5q4b0ett"><img width="380" height="200" src="https://glama.ai/mcp/servers/bn5q4b0ett/badge" alt="Markdownify Server MCP server" /></a>
+## 功能特点
 
-## Features
+- 支持PDF文件转换为Markdown格式
+- 支持PDF文件转换为纯文本格式
+- 保持文档的格式和结构
+- 支持中文文本提取
+- 自动识别标题层级
+- 保持段落顺序
 
-- Convert multiple file types to Markdown:
-  - PDF
-  - Images
-  - Audio (with transcription)
-  - DOCX
-  - XLSX
-  - PPTX
-- Convert web content to Markdown:
-  - YouTube video transcripts
-  - Bing search results
-  - General web pages
-- Retrieve existing Markdown files
+## 安装依赖
 
-## Getting Started
-
-1. Clone this repository
-2. Install dependencies:
-   ```
-   pnpm install
-   ```
-
-Note: this will also install `uv` and related Python depdencies.
-
-3. Build the project:
-   ```
-   pnpm run build
-   ```
-4. Start the server:
-   ```
-   pnpm start
-   ```
-
-## Development
-
-- Use `pnpm run dev` to start the TypeScript compiler in watch mode
-- Modify `src/server.ts` to customize server behavior
-- Add or modify tools in `src/tools.ts`
-
-## Usage with Desktop App
-
-To integrate this server with a desktop app, add the following to your app's server configuration:
-
-```js
-{
-  "mcpServers": {
-    "markdownify": {
-      "command": "node",
-      "args": [
-        "{ABSOLUTE PATH TO FILE HERE}/dist/index.js"
-      ],
-      "env": {
-        // By default, the server will use the default install location of `uv`
-        "UV_PATH": "/path/to/uv"
-      }
-    }
-  }
-}
+```bash
+pip install PyMuPDF
 ```
 
-## Available Tools
+## 使用方法
 
-- `youtube-to-markdown`: Convert YouTube videos to Markdown
-- `pdf-to-markdown`: Convert PDF files to Markdown
-- `bing-search-to-markdown`: Convert Bing search results to Markdown
-- `webpage-to-markdown`: Convert web pages to Markdown
-- `image-to-markdown`: Convert images to Markdown with metadata
-- `audio-to-markdown`: Convert audio files to Markdown with transcription
-- `docx-to-markdown`: Convert DOCX files to Markdown
-- `xlsx-to-markdown`: Convert XLSX files to Markdown
-- `pptx-to-markdown`: Convert PPTX files to Markdown
-- `get-markdown-file`: Retrieve an existing Markdown file
+```bash
+python pdf_to_md.py <pdf文件路径> [格式]
+```
 
-## Contributing
+格式参数可选：
+- `markdown` (默认): 输出Markdown格式
+- `text`: 输出纯文本格式
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 示例
 
-## License
+```bash
+python pdf_to_md.py input.pdf markdown
+python pdf_to_md.py input.pdf text
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 致谢
+
+本项目基于 [markdownify-mcp](http://github.com/zcaceres/markdownify-mcp) 项目开发，感谢原作者的开源贡献。

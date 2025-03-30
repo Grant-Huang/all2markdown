@@ -16,27 +16,38 @@ export type MarkdownResult = {
 };
 
 export class Markdownify {
-  private static async _markitdown(
+  private static async _convertPdfToMarkdown(
     filePath: string,
     projectRoot: string,
-    uvPath: string,
   ): Promise<string> {
-    const venvPath = path.join(projectRoot, ".venv");
-    const markitdownPath = path.join(venvPath, "bin", "markitdown");
+    const pythonScript = path.join(projectRoot, "pdf_to_md.py");
+    const pythonPath = path.join(projectRoot, ".venv", "Scripts", "python.exe");
 
-    if (!fs.existsSync(markitdownPath)) {
-      throw new Error("markitdown executable not found");
+    try {
+      console.log('Converting PDF using script:', pythonScript);
+      console.log('Python path:', pythonPath);
+      console.log('Input file:', filePath);
+
+      const { stdout, stderr } = await execAsync(
+        `"${pythonPath}" "${pythonScript}" "${filePath}"`,
+      );
+
+      if (stderr) {
+        console.error('PDF conversion stderr:', stderr);
+      }
+
+      if (!stdout) {
+        throw new Error('No output from PDF conversion');
+      }
+
+      console.log('PDF conversion stdout:', stdout);
+      return stdout;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to convert PDF: ${error.message}`);
+      }
+      throw error;
     }
-
-    const { stdout, stderr } = await execAsync(
-      `${uvPath} run ${markitdownPath} "${filePath}"`,
-    );
-
-    if (stderr) {
-      throw new Error(`Error executing command: ${stderr}`);
-    }
-
-    return stdout;
   }
 
   private static async saveToTempFile(content: string): Promise<string> {
@@ -44,7 +55,7 @@ export class Markdownify {
       os.tmpdir(),
       `markdown_output_${Date.now()}.md`,
     );
-    fs.writeFileSync(tempOutputPath, content);
+    await fs.promises.writeFile(tempOutputPath, content, 'utf-8');
     return tempOutputPath;
   }
 
@@ -52,14 +63,14 @@ export class Markdownify {
     filePath,
     url,
     projectRoot = path.resolve(__dirname, ".."),
-    uvPath = "~/.local/bin/uv",
   }: {
     filePath?: string;
     url?: string;
     projectRoot?: string;
-    uvPath?: string;
   }): Promise<MarkdownResult> {
     try {
+      console.log('toMarkdown called with:', { filePath, url, projectRoot });
+      
       let inputPath: string;
       let isTemporary = false;
 
@@ -69,20 +80,28 @@ export class Markdownify {
         inputPath = await this.saveToTempFile(content);
         isTemporary = true;
       } else if (filePath) {
+        console.log('Using filePath:', filePath);
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`Input file not found: ${filePath}`);
+        }
         inputPath = filePath;
       } else {
         throw new Error("Either filePath or url must be provided");
       }
 
-      const text = await this._markitdown(inputPath, projectRoot, uvPath);
+      console.log('Converting file:', inputPath);
+      console.log('Project root:', projectRoot);
+
+      const text = await this._convertPdfToMarkdown(inputPath, projectRoot);
       const outputPath = await this.saveToTempFile(text);
 
       if (isTemporary) {
-        fs.unlinkSync(inputPath);
+        await fs.promises.unlink(inputPath);
       }
 
       return { path: outputPath, text };
     } catch (e: unknown) {
+      console.error('Conversion error:', e);
       if (e instanceof Error) {
         throw new Error(`Error processing to Markdown: ${e.message}`);
       } else {
