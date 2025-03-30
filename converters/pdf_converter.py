@@ -26,8 +26,6 @@ def convert_pdf_to_text(pdf_path, output_format='text'):
             print(f"错误：文件 {pdf_path} 为空", file=sys.stderr)
             return None
 
-        print("\n=== 使用pdfplumber提取文本 ===", file=sys.stderr)
-        
         # 打开PDF文件
         with pdfplumber.open(pdf_path) as pdf:
             # 存储所有页面的文本
@@ -35,8 +33,6 @@ def convert_pdf_to_text(pdf_path, output_format='text'):
             
             # 遍历所有页面
             for page_num, page in enumerate(pdf.pages, 1):
-                print(f"\n正在处理第 {page_num} 页...", file=sys.stderr)
-                
                 # 提取文本
                 text = page.extract_text()
                 
@@ -44,10 +40,6 @@ def convert_pdf_to_text(pdf_path, output_format='text'):
                     # 确保文本是utf-8编码
                     if not isinstance(text, str):
                         text = text.decode('utf-8', errors='ignore')
-                    
-                    # 打印调试信息
-                    print(f"第 {page_num} 页提取的文本:", file=sys.stderr)
-                    print(text[:200], file=sys.stderr)
                     
                     # 添加页码信息
                     if output_format == 'markdown':
@@ -65,8 +57,6 @@ def convert_pdf_to_text(pdf_path, output_format='text'):
 
     except Exception as e:
         print(f"转换过程中出错: {str(e)}", file=sys.stderr)
-        import traceback
-        print(f"错误详情: {traceback.format_exc()}", file=sys.stderr)
         return None
 
 if __name__ == "__main__":

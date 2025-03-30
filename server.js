@@ -27,7 +27,11 @@ app.use('/uploads', express.static('uploads'));
 // 配置文件上传
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    const uploadDir = 'uploads';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + path.extname(file.originalname));
@@ -43,57 +47,41 @@ const upload = multer({ storage: storage });
   }
 });
 
-const convertPdfToText = async (pdfPath, format = 'markdown') => {
-  return new Promise((resolve, reject) => {
-    const pythonScript = path.join(__dirname, 'converters', 'pdf_converter.py');
-    const process = spawn('python', [pythonScript, pdfPath, format]);
-
-    let output = '';
-    let error = '';
-
-    process.stdout.on('data', (data) => {
-      const text = data.toString('utf8');
-      output += text;
-      console.log('Python stdout:', text);  // 打印 stdout 输出
-    });
-
-    process.stderr.on('data', (data) => {
-      const text = data.toString('utf8');
-      error += text;
-      console.log('Python stderr:', text);  // 打印 stderr 输出
-    });
-
-    process.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Python script failed with code ${code}: ${error}`));
-        return;
-      }
-      resolve(output);
-    });
-  });
-};
-
 // 处理文件上传和转换
-app.post('/convert', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: '没有上传文件' });
+app.post('/convert', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '没有上传文件' });
+  }
+
+  const format = req.body.format || 'text';
+  const pythonScript = format === 'markdown' ? 'pdf_to_md.py' : 'converters/pdf_converter.py';
+  const pythonProcess = spawn('python', [pythonScript, req.file.path, format]);
+
+  let output = '';
+  let error = '';
+
+  pythonProcess.stdout.on('data', (data) => {
+    output += data.toString();
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    error += data.toString();
+  });
+
+  pythonProcess.on('close', (code) => {
+    // 删除上传的文件
+    fs.unlink(req.file.path, (err) => {
+      if (err) {
+        console.error('删除文件失败:', err);
+      }
+    });
+
+    if (code !== 0) {
+      return res.status(500).json({ error: '转换失败', details: error });
     }
 
-    const filePath = req.file.path;
-    const format = req.body.format || 'markdown';
-    console.log('Processing file:', filePath, 'format:', format);
-
-    const result = await convertPdfToText(filePath, format);
-    
-    // 删除上传的文件
-    fs.unlinkSync(filePath);
-
-    res.json({ text: result });
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: '转换过程中发生错误' });
-  }
+    res.json({ result: output });
+  });
 });
 
 // 添加健康检查端点
