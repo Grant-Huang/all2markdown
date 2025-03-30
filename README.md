@@ -4,6 +4,8 @@
 
 本项目基于 [markdownify-mcp](http://github.com/zcaceres/markdownify-mcp) 项目开发。
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 功能特点
 
 - 支持PDF文件转换为Markdown格式
@@ -41,6 +43,8 @@ pip install -r requirements.txt
 
 ## 使用方法
 
+### 命令行方式
+
 基本用法：
 ```bash
 python all2md.py <输入文件路径> [--format {markdown,text}] [--output 输出文件路径]
@@ -62,6 +66,30 @@ python all2md.py document.pdf --format text
 # 指定输出文件
 python all2md.py document.pdf -o output.md
 ```
+
+### Web界面方式
+
+1. 启动Web服务器：
+```bash
+cd web
+python app.py
+```
+
+2. 打开浏览器访问：http://localhost:5000
+
+3. 在网页界面上：
+   - 选择要转换的PDF文件
+   - 选择输出格式（Markdown或纯文本）
+   - 点击"转换"按钮
+   - 转换结果会直接显示在页面上
+
+## 示例
+
+### 输入PDF文件
+![输入PDF文件](docs/images/input.png)
+
+### 转换后的Markdown
+![转换后的Markdown](docs/images/output.png)
 
 ## 支持的格式
 
