@@ -1,0 +1,21 @@
+[33m2bc5590[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m refactor: 清理调试代码，优化生产环境代码结构
+[33mfc87cd8[m feat: 优化PDF转Markdown功能，改进中文编码处理
+[33mf8ee26f[m feat: add web interface and GitHub Pages deployment
+[33ma9675a9[m Initial commit: All2Markdown converter
+[33mcc3662c[m Initial commit: PDF to Markdown converter based on markdownify-mcp
+[33m949f12e[m Merge pull request #4 from punkpeye/patch-1
+[33mf79f58b[m add MCP server badge
+[33mb515fe5[m fix: bad README markdown block
+[33m7f7cbe9[m Merge pull request #1 from f4ww4z/patch-1
+[33mbca800e[m Merge pull request #3 from zcaceres/f4ww4z-uvpath
+[33m9cadcd2[m Merge pull request #2 from f4ww4z/uvpath
+[33m63dd13b[m chore: clarify env var
+[33m7083f23[m chore: add bun for easier testing
+[33m972aae7[m chore: add bun for easier testing
+[33m0aa4b69[m Add UVPath as an argument
+[33m7ba7175[m Support file paths that contains spaces
+[33m737d30c[m feat: update README
+[33m7da0675[m fix: clean up
+[33m2933181[m feat: turn into generic markdownify module
+[33m24c948b[m fix: typescript error:
+[33m7ed8fb7[m feat: initial commit
