@@ -37,11 +37,11 @@ app.use('/uploads', express.static('uploads'));
 // 配置文件上传
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const uploadDir = 'uploads';
+        const uploadDir = path.join(__dirname, 'uploads');
         console.log(`检查上传目录: ${uploadDir}`);
         if (!fs.existsSync(uploadDir)) {
             console.log(`创建上传目录: ${uploadDir}`);
-            fs.mkdirSync(uploadDir);
+            fs.mkdirSync(uploadDir, { recursive: true });
         }
         console.log(`上传目录状态: ${fs.existsSync(uploadDir) ? '存在' : '不存在'}`);
         cb(null, uploadDir);
@@ -107,7 +107,8 @@ app.post('/convert', upload.single('file'), (req, res) => {
     }
 
     // 调用Python脚本进行转换
-    const pythonProcess = spawn('python', ['converters/pdf_converter.py', filePath, format]);
+    const pythonScript = path.join(__dirname, 'converters', 'pdf_converter.py');
+    const pythonProcess = spawn('python', [pythonScript, filePath, format]);
 
     let output = '';
     let errorOutput = '';
