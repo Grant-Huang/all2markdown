@@ -4,6 +4,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const cors = require('cors');
 const fs = require('fs');
+const { spawn: spawnPython } = require('child_process');
 
 const app = express();
 const port = 3000;
@@ -11,11 +12,20 @@ const port = 3000;
 // 启用CORS
 app.use(cors());
 
+// 添加 JSON 解析中间件
+app.use(express.json());
+
 // 添加 CSP 头
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; media-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+    "font-src 'self' https://cdn.jsdelivr.net; " +
+    "img-src 'self' data: blob:; " +
+    "media-src 'self' data: blob:; " +
+    "connect-src 'self'"
   );
   next();
 });
@@ -56,13 +66,14 @@ const storage = multer.diskStorage({
 const upload = multer({ 
     storage: storage,
     limits: {
-        fileSize: 10 * 1024 * 1024, // 限制文件大小为10MB
+        fileSize: 100 * 1024 * 1024, // 限制文件大小为100MB
     },
     fileFilter: function (req, file, cb) {
         // 检查文件类型
-        if (!file.mimetype.includes('pdf')) {
+        const allowedTypes = ['application/pdf', 'video/mp4', 'video/quicktime', 'video/x-msvideo'];
+        if (!allowedTypes.includes(file.mimetype)) {
             console.error('不支持的文件类型:', file.mimetype);
-            return cb(new Error('只支持PDF文件'));
+            return cb(new Error('不支持的文件类型'));
         }
         cb(null, true);
     }
@@ -77,6 +88,7 @@ app.post('/convert', upload.single('file'), (req, res) => {
 
     const filePath = req.file.path;
     const format = req.body.format || 'text';
+    const fileType = req.file.mimetype;
 
     console.log('文件上传信息:', {
         originalname: req.file.originalname,
@@ -106,16 +118,53 @@ app.post('/convert', upload.single('file'), (req, res) => {
         return res.status(400).json({ error: '文件为空' });
     }
 
+    // 根据文件类型选择转换脚本
+    let pythonScript;
+    if (fileType === 'application/pdf') {
+        pythonScript = path.join(__dirname, 'converters', 'pdf_converter.py');
+    } else if (fileType.startsWith('video/')) {
+        pythonScript = path.join(__dirname, 'converters', 'video_converter.py');
+    } else {
+        return res.status(400).json({ error: '不支持的文件类型' });
+    }
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
     // 调用Python脚本进行转换
-    const pythonScript = path.join(__dirname, 'converters', 'pdf_converter.py');
-    const pythonProcess = spawn('python', [pythonScript, filePath, format]);
+    const pythonProcess = spawn(path.join(__dirname, '.venv', 'Scripts', 'python.exe'), [pythonScript, filePath, format], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf8',
+        shell: false,  // Don't use shell to avoid buffering issues
+        windowsHide: true,
+        env: {
+            ...process.env,
+            PYTHONPATH: process.env.PYTHONPATH || '',
+            PYTHONIOENCODING: 'utf-8'
+        }
+    });
 
     let output = '';
     let errorOutput = '';
 
     pythonProcess.stdout.on('data', (data) => {
-        console.log('Python输出:', data.toString());
-        output += data.toString();
+        const outputStr = data.toString();
+        try {
+            // Try to parse as JSON for progress updates
+            const progressData = JSON.parse(outputStr);
+            if (progressData.type === 'progress') {
+                // Send progress update to client
+                res.write(`data: ${JSON.stringify(progressData)}\n\n`);
+            } else if (progressData.type === 'error') {
+                // Handle error message
+                errorOutput += progressData.message;
+            }
+        } catch (e) {
+            // If not JSON, it's the final markdown output
+            output += outputStr;
+        }
     });
 
     pythonProcess.stderr.on('data', (data) => {
@@ -125,6 +174,11 @@ app.post('/convert', upload.single('file'), (req, res) => {
 
     pythonProcess.on('error', (err) => {
         console.error('Python进程错误:', err);
+        console.error('错误详情:', {
+            message: err.message,
+            code: err.code,
+            stack: err.stack
+        });
         errorOutput += err.toString();
     });
 
@@ -141,14 +195,211 @@ app.post('/convert', upload.single('file'), (req, res) => {
         });
 
         if (code === 0 && output) {
-            res.json({ content: output });
+            // 发送最终结果
+            res.write(`data: ${JSON.stringify({ type: 'complete', content: output })}\n\n`);
+            res.end();
         } else {
-            res.status(500).json({ 
-                error: '转换失败',
-                details: errorOutput || '未知错误'
-            });
+            // 发送错误信息
+            res.write(`data: ${JSON.stringify({ type: 'error', error: errorOutput || '未知错误' })}\n\n`);
+            res.end();
         }
     });
+});
+
+// YouTube转换路由
+app.post('/api/tools/youtube-to-markdown', async (req, res) => {
+    try {
+        if (!req.body.url) {
+            return res.status(400).json({ error: '缺少 url 参数' });
+        }
+
+        const url = req.body.url;
+        
+        // 从URL中提取视频ID
+        let videoId;
+        if (url.includes('youtube.com')) {
+            videoId = url.split('v=')[1].split('&')[0];
+        } else if (url.includes('youtu.be')) {
+            videoId = url.split('/')[-1];
+        } else {
+            return res.status(400).json({ error: '无效的YouTube URL' });
+        }
+
+        // 调用Python脚本进行转换
+        const pythonScript = path.join(__dirname, 'converters', 'youtube_converter.py');
+        const pythonProcess = spawnPython('D:\\tools\\python3\\python.exe', [pythonScript, videoId]);
+
+        let output = '';
+        let errorOutput = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+            console.log('Python输出:', data.toString());
+            output += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+            console.error('Python错误:', data.toString());
+            errorOutput += data.toString();
+        });
+
+        pythonProcess.on('error', (err) => {
+            console.error('Python进程错误:', err);
+            console.error('错误详情:', {
+                message: err.message,
+                code: err.code,
+                stack: err.stack
+            });
+            errorOutput += err.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+            console.log('Python进程退出，代码:', code);
+            
+            if (code === 0 && output) {
+                res.json({ text: output });
+            } else {
+                res.status(500).json({ 
+                    error: '转换失败',
+                    details: errorOutput || '未知错误'
+                });
+            }
+        });
+    } catch (err) {
+        console.error('服务器错误:', err);
+        res.status(500).json({ error: err.message || '服务器内部错误' });
+    }
+});
+
+// Video conversion route
+app.post('/convert-video', upload.single('video'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No video file uploaded' });
+        }
+
+        const videoPath = path.resolve(req.file.path);
+        console.log('Processing video file:', {
+            originalPath: req.file.path,
+            resolvedPath: videoPath,
+            exists: fs.existsSync(videoPath),
+            isFile: fs.statSync(videoPath).isFile(),
+            size: fs.statSync(videoPath).size
+        });
+        
+        // 检查文件是否存在
+        if (!fs.existsSync(videoPath)) {
+            console.error('Uploaded file not found:', videoPath);
+            return res.status(400).json({ error: 'Uploaded file not found' });
+        }
+
+        // 检查文件是否可读
+        try {
+            fs.accessSync(videoPath, fs.constants.R_OK);
+        } catch (err) {
+            console.error('File is not readable:', videoPath);
+            return res.status(400).json({ error: 'File is not readable' });
+        }
+
+        // 设置响应头，启用 Server-Sent Events (SSE)
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const pythonScript = path.resolve(__dirname, 'converters', 'video_converter.py');
+        
+        // 检查Python脚本是否存在
+        if (!fs.existsSync(pythonScript)) {
+            console.error('Python script not found:', pythonScript);
+            res.write(`data: ${JSON.stringify({ type: 'error', error: 'Python script not found' })}\n\n`);
+            res.end();
+            return;
+        }
+
+        console.log('Starting Python process with:', {
+            script: pythonScript,
+            videoPath: videoPath,
+            scriptExists: fs.existsSync(pythonScript),
+            videoExists: fs.existsSync(videoPath)
+        });
+
+        // 启动Python进程进行视频转换
+        const pythonProcess = spawn(path.join(__dirname, '.venv', 'Scripts', 'python.exe'), [
+            pythonScript,
+            videoPath
+        ], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            encoding: 'utf8',
+            shell: false,
+            windowsHide: true,
+            env: {
+                ...process.env,
+                PYTHONPATH: process.env.PYTHONPATH || '',
+                PYTHONIOENCODING: 'utf-8'
+            }
+        });
+
+        let output = '';
+        let errorOutput = '';
+
+        // 处理Python进程的输出
+        pythonProcess.stdout.on('data', (data) => {
+            const outputStr = data.toString();
+            try {
+                // 尝试解析JSON输出
+                const jsonData = JSON.parse(outputStr);
+                if (jsonData.type === 'progress') {
+                    // 进度信息只发送到进度条
+                    res.write(`data: ${outputStr}\n\n`);
+                } else if (jsonData.type === 'complete') {
+                    // 音频转换文本发送到输出框
+                    output = jsonData.content;
+                    res.write(`data: ${outputStr}\n\n`);
+                }
+            } catch (e) {
+                // 如果不是JSON，则作为普通文本处理
+                // 这种情况通常是从Python脚本直接打印的文本输出
+                output = outputStr;
+                res.write(`data: ${JSON.stringify({ type: 'complete', content: outputStr })}\n\n`);
+            }
+        });
+
+        // 处理Python进程的错误输出
+        pythonProcess.stderr.on('data', (data) => {
+            console.error('Python error:', data.toString());
+            errorOutput += data.toString();
+        });
+
+        // 处理Python进程的错误
+        pythonProcess.on('error', (err) => {
+            console.error('Python process error:', err);
+            errorOutput += err.toString();
+        });
+
+        // 处理Python进程的结束
+        pythonProcess.on('close', (code) => {
+            console.log('Python process closed with code:', code);
+            
+            // 清理上传的文件
+            try {
+                if (fs.existsSync(videoPath)) {
+                    fs.unlinkSync(videoPath);
+                    console.log('Cleaned up uploaded file:', videoPath);
+                }
+            } catch (err) {
+                console.error('Failed to clean up file:', err);
+            }
+
+            if (code !== 0) {
+                // 如果进程异常退出，发送错误信息
+                res.write(`data: ${JSON.stringify({ type: 'error', error: errorOutput || 'Unknown error' })}\n\n`);
+            }
+            res.end();
+        });
+    } catch (error) {
+        console.error('Error converting video:', error);
+        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        res.end();
+    }
 });
 
 // 错误处理中间件
@@ -156,7 +407,7 @@ app.use((err, req, res, next) => {
     console.error('服务器错误:', err);
     if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({ error: '文件大小超过限制（最大10MB）' });
+            return res.status(400).json({ error: '文件大小超过限制（最大100MB）' });
         }
     }
     res.status(500).json({ error: err.message || '服务器内部错误' });

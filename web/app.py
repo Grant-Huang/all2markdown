@@ -3,6 +3,8 @@ import sys
 import argparse
 from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename
+import requests
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # 添加项目根目录到 Python 路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,6 +75,59 @@ def upload_file():
     
     # 返回文件名
     return jsonify({'filepath': filename})
+
+@app.route('/api/tools/youtube-to-markdown', methods=['POST'])
+def convert_youtube():
+    try:
+        if not request.is_json:
+            return jsonify({'error': '请求必须是 JSON 格式'}), 400
+        
+        data = request.get_json()
+        if not data or 'url' not in data:
+            return jsonify({'error': '缺少 url 参数'}), 400
+        
+        url = data['url']
+        
+        # 从URL中提取视频ID
+        if 'youtube.com' in url:
+            video_id = url.split('v=')[1].split('&')[0]
+        elif 'youtu.be' in url:
+            video_id = url.split('/')[-1]
+        else:
+            return jsonify({'error': '无效的YouTube URL'}), 400
+        
+        # 获取视频标题
+        try:
+            response = requests.get(f'https://www.youtube.com/oembed?url={url}&format=json')
+            video_info = response.json()
+            title = video_info['title']
+        except:
+            title = "YouTube Video"
+        
+        # 获取视频字幕
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['zh', 'en'])
+        except Exception as e:
+            return jsonify({'error': f'无法获取视频字幕: {str(e)}'}), 400
+        
+        # 构建Markdown内容
+        markdown = f"# {title}\n\n"
+        markdown += "## 视频字幕\n\n"
+        
+        for entry in transcript:
+            start_time = int(entry['start'])
+            minutes = start_time // 60
+            seconds = start_time % 60
+            timestamp = f"{minutes:02d}:{seconds:02d}"
+            markdown += f"**{timestamp}** {entry['text']}\n\n"
+        
+        return jsonify({
+            'text': markdown
+        })
+        
+    except Exception as e:
+        print(f'Error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PDF to Markdown Web Server')
